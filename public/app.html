@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saven</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Montserrat', sans-serif; background: #051827; overflow: hidden; }
+        .orb {
+            box-shadow: 0 0 80px rgba(189, 217, 205, 0.2);
+            transition: transform 0.1s ease-out;
+        }
+        #visual-hug-container {
+            transition: opacity 2s ease-in-out;
+            background: radial-gradient(circle, rgba(33,68,87,0.8) 0%, rgba(5,24,39,1) 100%);
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen">
+
+    <div id="visual-hug-container" class="fixed inset-0 z-0 opacity-0 pointer-events-none flex items-center justify-center">
+        <img id="hug-image" src="" class="max-w-4xl w-full rounded-lg shadow-2xl transition-all duration-1000 scale-95">
+    </div>
+
+    <div class="z-10 text-center space-y-12">
+        <div id="status" class="text-[#8eaebb] tracking-[0.4em] uppercase text-xs animate-pulse">Connecting to Haven...</div>
+        
+        <div id="orb" class="orb w-48 h-48 bg-[#bdd9cd] rounded-full mx-auto flex items-center justify-center">
+            <div class="w-40 h-40 bg-[#386994] rounded-full opacity-50"></div>
+        </div>
+
+        <div class="space-y-4">
+            <h1 id="transcript" class="text-white text-xl font-300 italic opacity-70 px-8 max-w-lg mx-auto">
+                "Take a deep breath and speak when you're ready."
+            </h1>
+        </div>
+
+        <button id="mic-btn" class="bg-transparent border border-[#8eaebb] text-[#8eaebb] px-8 py-2 rounded-full hover:bg-[#8eaebb] hover:text-[#051827] transition-all">
+            Start Session
+        </button>
+    </div>
+
+    <script>
+        let socket;
+        let audioContext;
+        let processor;
+
+        const micBtn = document.getElementById('mic-btn');
+        const orb = document.getElementById('orb');
+        const status = document.getElementById('status');
+        const hugContainer = document.getElementById('visual-hug-container');
+        const hugImage = document.getElementById('hug-image');
+
+        micBtn.onclick = async () => {
+            micBtn.style.display = 'none';
+            status.innerText = 'Haven is Open';
+            
+            // 1. Initialize Audio Context
+            audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            
+            // 2. Connect WebSocket to your FastAPI/Cloud Run URL
+            socket = new WebSocket(`ws://${window.location.host}/ws/saven-live`);
+            socket.binaryType = 'arraybuffer';
+
+            socket.onmessage = async (event) => {
+                if (typeof event.data === 'string') {
+                    const msg = JSON.parse(event.data);
+                    // Check for Tool Call (The Visual Hug)
+                    if (msg.tool_call === 'generate_visual_hug') {
+                        showVisualHug(msg.image_url);
+                    }
+                } else {
+                    // It's raw PCM audio from Gemini
+                    playAudioStream(event.data);
+                }
+            };
+
+            // 3. Start Mic Stream
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const source = audioContext.createMediaStreamSource(stream);
+            processor = audioContext.createScriptProcessor(2048, 1, 1);
+            
+            source.connect(processor);
+            processor.connect(audioContext.destination);
+
+            processor.onaudioprocess = (e) => {
+                const inputData = e.inputBuffer.getChannelData(0);
+                // Convert to Int16 for Gemini Live API
+                const pcmData = floatTo16BitPCM(inputData);
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(pcmData);
+                }
+            };
+        };
+
+        function playAudioStream(buffer) {
+            // High-performance PCM playback logic here
+            // (Uses AudioContext.decodeAudioData or SourceNode)
+            orb.style.transform = `scale(${1 + (Math.random() * 0.1)})`;
+        }
+
+        function showVisualHug(url) {
+            hugImage.src = url;
+            hugContainer.classList.remove('opacity-0');
+            hugContainer.classList.add('opacity-100');
+            hugImage.classList.remove('scale-95');
+            hugImage.classList.add('scale-100');
+        }
+
+        function floatTo16BitPCM(output) {
+            let buffer = new ArrayBuffer(output.length * 2);
+            let view = new DataView(buffer);
+            for (let i = 0; i < output.length; i++) {
+                let s = Math.max(-1, Math.min(1, output[i]));
+                view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            return buffer;
+        }
+    </script>
+</body>
+</html>
