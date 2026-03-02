@@ -4,6 +4,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
+from agent.tools import visual_hug_tool
 
 # Initialize Wellness Environment
 load_dotenv()
@@ -19,6 +20,7 @@ client = genai.Client(
 # Saven's Core Persona & Configuration
 LIVE_CONFIG = types.LiveConnectConfig(
     model="models/gemini-3.1-flash",
+    tools=[visual_hug_tool],
     response_modalities=["AUDIO"], # Saven speaks back
     speech_config=types.SpeechConfig(
         voice_config=types.VoiceConfig(prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Aoede"))
